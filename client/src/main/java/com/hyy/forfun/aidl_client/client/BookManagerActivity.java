@@ -4,16 +4,21 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
+import android.os.Message;
 import android.os.RemoteException;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.hyy.forfun.aidl_client.R;
 import com.hyy.forfun.aidl_demo.IBookManager;
+import com.hyy.forfun.aidl_demo.IOnNewBookArrivedListener;
 import com.hyy.forfun.aidl_demo.bean.Book;
 
 import java.util.List;
@@ -21,23 +26,49 @@ import java.util.List;
 public class BookManagerActivity extends AppCompatActivity {
 
     private static final String TAG = BookManagerActivity.class.getSimpleName();
+    private static final int MESSAGE_NEW_BOOK_ARRIVED = 1;
+
+    private Handler mHandler = new Handler(Looper.getMainLooper()) {
+        @Override
+        public void handleMessage(@NonNull Message msg) {
+            switch (msg.what) {
+                case MESSAGE_NEW_BOOK_ARRIVED:
+                    Log.e(TAG, "receive new book :" + msg.obj);
+                    break;
+                default:
+                    super.handleMessage(msg);
+            }
+        }
+    };
 
     Button btnGetBookList, btnAddBook;
 
-    private IBookManager mBookManager;
+    private IBookManager mRemoteBookManager;
 
     private ServiceConnection mConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             Log.i(TAG, "onServiceConnected");
-            mBookManager = IBookManager.Stub.asInterface(service);
+            mRemoteBookManager = IBookManager.Stub.asInterface(service);
 
+            try {
+                mRemoteBookManager.registerListener(mOnNewBookArrivedListener);
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
             Log.i(TAG, "onServiceDisconnected");
-            mBookManager = null;
+            mRemoteBookManager = null;
+        }
+    };
+
+    private IOnNewBookArrivedListener mOnNewBookArrivedListener = new IOnNewBookArrivedListener.Stub() {
+        @Override
+        public void onNewBookArrived(Book newBook) throws RemoteException {
+            mHandler.obtainMessage(MESSAGE_NEW_BOOK_ARRIVED, newBook).sendToTarget();
         }
     };
 
@@ -55,9 +86,9 @@ public class BookManagerActivity extends AppCompatActivity {
         btnGetBookList.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (null != mBookManager) {
+                if (null != mRemoteBookManager) {
                     try {
-                        List<Book> bookList = mBookManager.getBookList();
+                        List<Book> bookList = mRemoteBookManager.getBookList();
                         Log.i(TAG, "$$query book list begin:");
                         bookList.forEach(book -> {
                             Log.i(TAG, book.toString());
@@ -74,10 +105,10 @@ public class BookManagerActivity extends AppCompatActivity {
         btnAddBook.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (null != mBookManager) {
+                if (null != mRemoteBookManager) {
                     try {
-                        Book book3 = new Book(3,"艺术探索");
-                        mBookManager.addBook(book3);
+                        Book book3 = new Book(3, "艺术探索");
+                        mRemoteBookManager.addBook(book3);
                     } catch (RemoteException e) {
                         e.printStackTrace();
                     }
@@ -90,8 +121,18 @@ public class BookManagerActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        super.onDestroy();
-        unbindService(mConnection);
+        if(mRemoteBookManager !=null &&
+            mRemoteBookManager.asBinder().isBinderAlive()){
 
+            try {
+                Log.e(TAG,"unregister listener:"+mOnNewBookArrivedListener);
+                mRemoteBookManager.unRegisterListener(mOnNewBookArrivedListener);
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
+        }
+
+        unbindService(mConnection);
+        super.onDestroy();
     }
 }

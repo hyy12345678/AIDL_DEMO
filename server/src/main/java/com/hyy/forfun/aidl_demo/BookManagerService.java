@@ -39,24 +39,24 @@ public class BookManagerService extends Service {
 
         @Override
         public void registerListener(IOnNewBookArrivedListener listener) throws RemoteException {
-            if(!mListenerList.contains(listener)){
+            if (!mListenerList.contains(listener)) {
                 mListenerList.add(listener);
-            }else{
-                Log.e(TAG,"already exists");
+            } else {
+                Log.e(TAG, "already exists");
             }
-            Log.e(TAG,"registerListener, size:"+mListenerList.size());
+            Log.e(TAG, "registerListener, size:" + mListenerList.size());
         }
 
         @Override
         public void unRegisterListener(IOnNewBookArrivedListener listener) throws RemoteException {
-            if(mListenerList.contains(listener)){
+            if (mListenerList.contains(listener)) {
                 mListenerList.remove(listener);
-                Log.e(TAG,"unregister listener succeed ");
+                Log.e(TAG, "unregister listener succeed ");
 
-            }else{
-                Log.e(TAG,"not found, can not unregister");
+            } else {
+                Log.e(TAG, "not found, can not unregister");
             }
-            Log.e(TAG,"unRegisterListener, size:"+mListenerList.size());
+            Log.e(TAG, "unRegisterListener, size:" + mListenerList.size());
         }
 
 
@@ -64,7 +64,7 @@ public class BookManagerService extends Service {
         public boolean onTransact(int code, Parcel data, Parcel reply, int flags) throws RemoteException {
             //权限验证
             int check = checkCallingPermission("com.hyy.forfun.aidl.permission.TEST");
-            if(check == PackageManager.PERMISSION_DENIED){
+            if (check == PackageManager.PERMISSION_DENIED) {
                 Log.e(TAG, "onTransact AIDL permission denied!");
                 return false;
             }
@@ -72,11 +72,11 @@ public class BookManagerService extends Service {
             //包名验证
             String packageName = null;
             String[] packages = getPackageManager().getPackagesForUid(getCallingUid());
-            if(packages != null && packages.length > 0){
+            if (packages != null && packages.length > 0) {
                 packageName = packages[0];
             }
             assert packageName != null;
-            if(!packageName.startsWith("com.hyy.forfun.aidl_client")){
+            if (!packageName.startsWith("com.hyy.forfun.aidl_client")) {
                 Log.e(TAG, "onTransact AIDL package denied!");
                 return false;
             }
@@ -94,8 +94,16 @@ public class BookManagerService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        mBookList.add(new Book(1,"ios"));
-        mBookList.add(new Book(2,"Android"));
+        mBookList.add(new Book(1, "ios"));
+        mBookList.add(new Book(2, "Android"));
+
+        new Thread(new ServiceWorker()).start();
+    }
+
+    @Override
+    public void onDestroy() {
+        mIsServiceDestoryed.set(true);
+        super.onDestroy();
     }
 
     @Override
@@ -117,13 +125,35 @@ public class BookManagerService extends Service {
         return mBinder;
     }
 
-    private class ServiceWorker implements Runnable{
+    private void onNewBookArrived(Book book) throws RemoteException {
+        mBookList.add(book);
+        Log.e(TAG, "onNewBookArrived, notify listeners:" + mListenerList.size());
+        for (IOnNewBookArrivedListener listener : mListenerList) {
+            Log.e(TAG,"onNewBookArrived, notify listener:"+listener);
+            listener.onNewBookArrived(book);
+        }
+    }
+
+    private class ServiceWorker implements Runnable {
 
         @Override
         public void run() {
             //doing background process
-            while(!mIsServiceDestoryed.get()){
+            while (!mIsServiceDestoryed.get()) {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
 
+                int bookId = mBookList.size() + 1;
+                Book newBook = new Book(bookId, "new book#" + bookId);
+
+                try {
+                    onNewBookArrived(newBook);
+                } catch (RemoteException e) {
+                    e.printStackTrace();
+                }
             }
         }
     }

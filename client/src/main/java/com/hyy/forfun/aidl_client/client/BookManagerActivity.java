@@ -86,19 +86,26 @@ public class BookManagerActivity extends AppCompatActivity {
         btnGetBookList.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (null != mRemoteBookManager) {
-                    try {
-                        List<Book> bookList = mRemoteBookManager.getBookList();
-                        Log.i(TAG, "$$query book list begin:");
-                        bookList.forEach(book -> {
-                            Log.i(TAG, book.toString());
-                        });
-                        Log.i(TAG, "$$query book list end");
 
-                    } catch (RemoteException e) {
-                        e.printStackTrace();
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (null != mRemoteBookManager) {
+                            try {
+                                List<Book> bookList = mRemoteBookManager.getBookList();
+                                Log.i(TAG, "$$query book list begin:");
+                                bookList.forEach(book -> {
+                                    Log.i(TAG, book.toString());
+                                });
+                                Log.i(TAG, "$$query book list end");
+
+                            } catch (RemoteException e) {
+                                e.printStackTrace();
+                            }
+                        }
                     }
-                }
+                }).start();
+
             }
         });
 
@@ -121,11 +128,11 @@ public class BookManagerActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        if(mRemoteBookManager !=null &&
-            mRemoteBookManager.asBinder().isBinderAlive()){
+        if (mRemoteBookManager != null &&
+                mRemoteBookManager.asBinder().isBinderAlive()) {
 
             try {
-                Log.e(TAG,"unregister listener:"+mOnNewBookArrivedListener);
+                Log.e(TAG, "unregister listener:" + mOnNewBookArrivedListener);
                 mRemoteBookManager.unRegisterListener(mOnNewBookArrivedListener);
             } catch (RemoteException e) {
                 e.printStackTrace();
